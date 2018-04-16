@@ -82,9 +82,10 @@ func main() {
 	fmt.Printf("Allowed hosts:\n%+v\nAllowed networks:\n%+v\n", filter.hosts, filter.networks)
 
 	server, _ := socks5.New(&socks5.Config{
-		ConnLimit: 20000,
-		Rules:     filter,
-		Timeout:   time.Second * 2,
+		ConnLimit:      20000,
+		Rules:          filter,
+		IdleTimeout:    time.Minute * 5,
+		ConnectTimeout: time.Second * 5,
 	})
 
 	prometheus.MustRegister(connCountGauge)
