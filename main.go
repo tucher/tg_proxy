@@ -52,6 +52,13 @@ var (
 		Name: "active_connections_count",
 		Help: "Counter of current opened tcp connections",
 	})
+	connectionDurations = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "connection_duration_seconds",
+			Help:    "Connection duration",
+			Buckets: prometheus.ExponentialBuckets(0.02, 3, 15),
+		},
+	)
 )
 
 func main() {
@@ -84,18 +91,23 @@ func main() {
 	server, _ := socks5.New(&socks5.Config{
 		ConnLimit:      20000,
 		Rules:          filter,
-		IdleTimeout:    time.Minute * 5,
+		IdleTimeout:    time.Minute * 2,
 		ConnectTimeout: time.Second * 5,
+		Credentials:    socks5.StaticCredentials(map[string]string{"123abc": "abc123"}),
 	})
 
-	prometheus.MustRegister(connCountGauge)
+	prometheus.MustRegister(connCountGauge, connectionDurations)
 	go func() {
 		for newCount := range server.GetConnCountChan() {
 			connCountGauge.Set(float64(newCount))
-			fmt.Println("New conn count: ", newCount)
+		}
+	}()
+	go func() {
+		for finishedConnInfo := range server.GetFinishedConnChan() {
+			connectionDurations.Observe(finishedConnInfo.Duration.Seconds())
 		}
 	}()
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":6666", nil)
-	server.ListenAndServe("tcp", "0.0.0.0:6667")
+	server.ListenAndServe("tcp", []string{"0.0.0.0:443"})
 }
